@@ -1,0 +1,370 @@
+{
+  "model": "qwen3:4b-instruct-2507-q4_K_M",
+  "date": "20261115-1341",
+  "records": [
+    {
+      "id": "q1",
+      "category": "texte",
+      "question": "What is the role of positional encoding in the Transformer, and which functions are used to compute it?",
+      "answer": "The role of positional encoding in the Transformer is to provide information about the position of tokens in the input sequence, as the self-attention mechanism does not inherently consider the order of elements. Since the Transformer relies solely on attention mechanisms and does not use recurrence or convolution, positional encodings are essential to preserve the sequential structure of the input.\n\nThe paper states that \"we add 'positional encodings' to the input embeddings at the input layer\" (page 5). However, it does not explicitly specify the functions or mathematical formulas used to compute the positional encodings. The method of computation is not detailed in the provided text.",
+      "trace": [
+        {
+          "step": "Action",
+          "tool": "retriever_tool",
+          "arguments": {
+            "query": "role of positional encoding in Transformer and functions used to compute it",
+            "modality": "text"
+          }
+        },
+        {
+          "step": "Observation",
+          "tool": "retriever_tool",
+          "content": "[1] (texte, page 9, score 0.879)\nWe\nplan to extend the Transformer to problems involving input and output modalities other than text and\nto investigate local, restricted attention mechanisms to efﬁciently handle large inputs and outputs\nsuch as images, audio and video. Making generation less sequential is another research goals of ours.\n\n[2] (texte, page 2, score 0.865)\nTo the best of our knowledge, however, the Transformer is the ﬁrst transduction model relying\nentirely on self-attention to compute representations of its input and output without using sequence-\naligned RNNs or convolution.\n\n[3] (texte, page 1, score 0.860)\nWe propose a new simple network architecture, the Transformer,\nbased solely on attention mechanisms, dispensing with recurrence and convolutions\nentirely. Experiments on two machine translation tasks show these models to\nbe superior in quality while being more parallelizable and requiring signiﬁcantly\nless time to train.\n\n[4] (texte, page 2, score 0.852)\nIn the following sections, we will describe the Transformer, motivate\nself-attention and discuss its advantages over models such as [14, 15] and [8].\n3\nModel Architecture\nMost competitive neural sequence transduction models have an encoder-decoder structure [5, 2, 29].\n\n[5] (texte, page 5, score 0.846)\nTo this end, we add \"positional encodings\" to the input embeddings at the\n5"
+        },
+        {
+          "step": "Answer",
+          "content": "The role of positional encoding in the Transformer is to provide information about the position of tokens in the input sequence, as the self-attention mechanism does not inherently consider the order of elements. Since the Transformer relies solely on attention mechanisms and does not use recurrence or convolution, positional encodings are essential to preserve the sequential structure of the input.\n\nThe paper states that \"we add 'positional encodings' to the input embeddings at the input layer\" (page 5). However, it does not explicitly specify the functions or mathematical formulas used to compute the positional encodings. The method of computation is not detailed in the provided text."
+        }
+      ],
+      "checks": {
+        "tool_called": true,
+        "n_calls": 1,
+        "modalities": [
+          "text"
+        ],
+        "modality_ok": true,
+        "observed_pages": [
+          1,
+          2,
+          5,
+          9
+        ],
+        "retrieval_ok": false,
+        "duration_s": 86.6,
+        "images": [],
+        "answer_ok": false,
+        "missing_keywords": [
+          "sine",
+          "cosine"
+        ]
+      }
+    },
+    {
+      "id": "q2",
+      "category": "tableau",
+      "question": "Quel score BLEU le Transformer (big) obtient-il sur la traduction anglais-allemand ?",
+      "answer": "Le Transformer (big) obtient un score BLEU de **28.4** sur la traduction anglais-allemand, comme indiqué dans Table 2 (page 8).",
+      "trace": [
+        {
+          "step": "Action",
+          "tool": "retriever_tool",
+          "arguments": {
+            "query": "BLEU score of Transformer (big) on English-German translation",
+            "modality": "table"
+          }
+        },
+        {
+          "step": "Observation",
+          "tool": "retriever_tool",
+          "content": "[1] (tableau, page 8, score 0.785)\nTable 2: The Transformer achieves better BLEU scores than previous state-of-the-art models on the English-to-German and English-to-French newstest2014 tests at a fraction of the training cost.\n\nBLEU | Training Cost (FLOPs)\nModel\nEN-DE | EN-FR | EN-DE | EN-FR\nByteNet [15] | 23.75\nDeep-Att + PosUnk [32] | 39.2 | 1.0 · 1020\nGNMT + RL [31] | 24.6 | 39.92 | 2.3 · 1019 | 1.4 · 1020\nConvS2S [8] | 25.16 | 40.46 | 9.6 · 1018 | 1.5 · 1020\nMoE [26] | 26.03 | 40.56 | 2.0 · 1019 | 1.2 · 1020\nDeep-Att + PosUnk Ensemble [32] | 40.4 | 8.0 · 1020\nGNMT + RL Ensemble [31] | 26.30 | 41.16 | 1.8 · 1020 | 1.1 · 1021\nConvS2S Ensemble [8] | 26.36 | 41.29 | 7.7 · 1019 | 1.2 · 1021\nTransformer (base model) | 27.3 | 38.1 | 3.3 · 1018\nTransformer (big) | 28.4 | 41.0 | 2.3 · 1019\n\n[2] (tableau, page 9, score 0.694)\nTable 3: Variations on the Transformer architecture. Unlisted values are identical to those of the base model. All metrics are on the English-to-German translation development set, newstest2013. Listed perplexities are per-wordpiece, according to our byte-pair encoding, and should not be compared to per-word perplexities.\n\ntrain | PPL | BLEU | params\nN | dmodel | dff | h | dk | dv | Pdrop | ϵls\nsteps | (dev) | (dev) | ×106\nbase | 6 | 512 | 2048 | 8 | 64 | 64 | 0.1 | 0.1 | 100K | 4.92 | 25.8 | 65\n1 | 512 | 512 | 5.29 | 24.9\n4 | 128 | 128 | 5.00 | 25.5\n(A)\n16 | 32 | 32 | 4.91 | 25.8\n32 | 16 | 16 | 5.01 | 25.4\n16 | 5.16 | 25.1 | 58\n(B)\n32 | 5.01 | 25.4 | 60\n2 | 6.11 | 23.7 | 36\n4 | 5.19 | 25.3 | 50\n8 | 4.88 | 25.5 | 80\n(C) | 256 | 32 | 32 | 5.75 | 24.5 | 28\n1024 | 128 | 128 | 4.66 | 26.0 | 168\n1024 | 5.12 | 25.4 | 53\n4096 | 4.75 | 26.2 | 90\n0.0 | 5.77 | 24.6\n0.2 | 4.95 | 25.5\n(D)\n0.0 | 4.67 | 25.3\n0.2 | 5.47 | 25.7\n(E) | positional embedding instead of sinusoids | 4.92 | 25.7\nbig | 6 | 1024 | 4096 | 16 | 0.3 | 300K | 4.33 | 26.4 | 213\n\n[3] (tableau, page 6, score 0.592)\nTable 1: Maximum path lengths, per-layer complexity and minimum number of sequential operations for different layer types. n is the sequence length, d is the representation dimension, k is the kernel size of convolutions and r the size of the neighborhood in restricted self-attention.\n\nLayer Type | Complexity per Layer | Sequential | Maximum Path Length\nOperations\nSelf-Attention | O(n2 · d) | O(1) | O(1)\nRecurrent | O(n · d2) | O(n) | O(n)\nConvolutional | O(k · n · d2) | O(1) | O(logk(n))\nSelf-Attention (restricted) | O(r · n · d) | O(1) | O(n/r)"
+        },
+        {
+          "step": "Answer",
+          "content": "Le Transformer (big) obtient un score BLEU de **28.4** sur la traduction anglais-allemand, comme indiqué dans Table 2 (page 8)."
+        }
+      ],
+      "checks": {
+        "tool_called": true,
+        "n_calls": 1,
+        "modalities": [
+          "table"
+        ],
+        "modality_ok": true,
+        "observed_pages": [
+          6,
+          8,
+          9
+        ],
+        "retrieval_ok": true,
+        "duration_s": 58.8,
+        "images": [],
+        "answer_ok": true,
+        "missing_keywords": []
+      }
+    },
+    {
+      "id": "q3",
+      "category": "tableau",
+      "question": "According to Table 3, how many attention heads and which d_model does the big model use?",
+      "answer": "According to Table 3 (page 9), the big model uses 16 attention heads and a d_model of 6.",
+      "trace": [
+        {
+          "step": "Action",
+          "tool": "retriever_tool",
+          "arguments": {
+            "query": "Table 3 attention heads and d_model for the big model",
+            "modality": "table"
+          }
+        },
+        {
+          "step": "Observation",
+          "tool": "retriever_tool",
+          "content": "[1] (tableau, page 9, score 0.702 | référence citée)\nTable 3: Variations on the Transformer architecture. Unlisted values are identical to those of the base model. All metrics are on the English-to-German translation development set, newstest2013. Listed perplexities are per-wordpiece, according to our byte-pair encoding, and should not be compared to per-word perplexities.\n\ntrain | PPL | BLEU | params\nN | dmodel | dff | h | dk | dv | Pdrop | ϵls\nsteps | (dev) | (dev) | ×106\nbase | 6 | 512 | 2048 | 8 | 64 | 64 | 0.1 | 0.1 | 100K | 4.92 | 25.8 | 65\n1 | 512 | 512 | 5.29 | 24.9\n4 | 128 | 128 | 5.00 | 25.5\n(A)\n16 | 32 | 32 | 4.91 | 25.8\n32 | 16 | 16 | 5.01 | 25.4\n16 | 5.16 | 25.1 | 58\n(B)\n32 | 5.01 | 25.4 | 60\n2 | 6.11 | 23.7 | 36\n4 | 5.19 | 25.3 | 50\n8 | 4.88 | 25.5 | 80\n(C) | 256 | 32 | 32 | 5.75 | 24.5 | 28\n1024 | 128 | 128 | 4.66 | 26.0 | 168\n1024 | 5.12 | 25.4 | 53\n4096 | 4.75 | 26.2 | 90\n0.0 | 5.77 | 24.6\n0.2 | 4.95 | 25.5\n(D)\n0.0 | 4.67 | 25.3\n0.2 | 5.47 | 25.7\n(E) | positional embedding instead of sinusoids | 4.92 | 25.7\nbig | 6 | 1024 | 4096 | 16 | 0.3 | 300K | 4.33 | 26.4 | 213\n\n[2] (tableau, page 8, score 0.674)\nTable 2: The Transformer achieves better BLEU scores than previous state-of-the-art models on the English-to-German and English-to-French newstest2014 tests at a fraction of the training cost.\n\nBLEU | Training Cost (FLOPs)\nModel\nEN-DE | EN-FR | EN-DE | EN-FR\nByteNet [15] | 23.75\nDeep-Att + PosUnk [32] | 39.2 | 1.0 · 1020\nGNMT + RL [31] | 24.6 | 39.92 | 2.3 · 1019 | 1.4 · 1020\nConvS2S [8] | 25.16 | 40.46 | 9.6 · 1018 | 1.5 · 1020\nMoE [26] | 26.03 | 40.56 | 2.0 · 1019 | 1.2 · 1020\nDeep-Att + PosUnk Ensemble [32] | 40.4 | 8.0 · 1020\nGNMT + RL Ensemble [31] | 26.30 | 41.16 | 1.8 · 1020 | 1.1 · 1021\nConvS2S Ensemble [8] | 26.36 | 41.29 | 7.7 · 1019 | 1.2 · 1021\nTransformer (base model) | 27.3 | 38.1 | 3.3 · 1018\nTransformer (big) | 28.4 | 41.0 | 2.3 · 1019\n\n[3] (tableau, page 6, score 0.664)\nTable 1: Maximum path lengths, per-layer complexity and minimum number of sequential operations for different layer types. n is the sequence length, d is the representation dimension, k is the kernel size of convolutions and r the size of the neighborhood in restricted self-attention.\n\nLayer Type | Complexity per Layer | Sequential | Maximum Path Length\nOperations\nSelf-Attention | O(n2 · d) | O(1) | O(1)\nRecurrent | O(n · d2) | O(n) | O(n)\nConvolutional | O(k · n · d2) | O(1) | O(logk(n))\nSelf-Attention (restricted) | O(r · n · d) | O(1) | O(n/r)"
+        },
+        {
+          "step": "Answer",
+          "content": "According to Table 3 (page 9), the big model uses 16 attention heads and a d_model of 6."
+        }
+      ],
+      "checks": {
+        "tool_called": true,
+        "n_calls": 1,
+        "modalities": [
+          "table"
+        ],
+        "modality_ok": true,
+        "observed_pages": [
+          6,
+          8,
+          9
+        ],
+        "retrieval_ok": true,
+        "duration_s": 55.9,
+        "images": [],
+        "answer_ok": false,
+        "missing_keywords": [
+          "1024"
+        ]
+      }
+    },
+    {
+      "id": "q4",
+      "category": "tableau (multi-étapes)",
+      "question": "Compare the training cost in FLOPs on English-to-German of the big Transformer and of the ConvS2S Ensemble.",
+      "answer": "The training cost in FLOPs for English-to-German translation is as follows:\n\n- **Big Transformer**: 2.3 · 10¹⁹ FLOPs (from Table 2, page 8).\n- **ConvS2S Ensemble**: 7.7 · 10¹⁹ FLOPs (from Table 2, page 8).\n\nThus, the big Transformer has a lower training cost in FLOPs compared to the ConvS2S Ensemble. \n\n(Source: Table 2, page 8)",
+      "trace": [
+        {
+          "step": "Action",
+          "tool": "retriever_tool",
+          "arguments": {
+            "query": "training cost FLOPs English-to-German big Transformer ConvS2S Ensemble",
+            "modality": "table"
+          }
+        },
+        {
+          "step": "Observation",
+          "tool": "retriever_tool",
+          "content": "[1] (tableau, page 8, score 0.779)\nTable 2: The Transformer achieves better BLEU scores than previous state-of-the-art models on the English-to-German and English-to-French newstest2014 tests at a fraction of the training cost.\n\nBLEU | Training Cost (FLOPs)\nModel\nEN-DE | EN-FR | EN-DE | EN-FR\nByteNet [15] | 23.75\nDeep-Att + PosUnk [32] | 39.2 | 1.0 · 1020\nGNMT + RL [31] | 24.6 | 39.92 | 2.3 · 1019 | 1.4 · 1020\nConvS2S [8] | 25.16 | 40.46 | 9.6 · 1018 | 1.5 · 1020\nMoE [26] | 26.03 | 40.56 | 2.0 · 1019 | 1.2 · 1020\nDeep-Att + PosUnk Ensemble [32] | 40.4 | 8.0 · 1020\nGNMT + RL Ensemble [31] | 26.30 | 41.16 | 1.8 · 1020 | 1.1 · 1021\nConvS2S Ensemble [8] | 26.36 | 41.29 | 7.7 · 1019 | 1.2 · 1021\nTransformer (base model) | 27.3 | 38.1 | 3.3 · 1018\nTransformer (big) | 28.4 | 41.0 | 2.3 · 1019\n\n[2] (tableau, page 9, score 0.648)\nTable 3: Variations on the Transformer architecture. Unlisted values are identical to those of the base model. All metrics are on the English-to-German translation development set, newstest2013. Listed perplexities are per-wordpiece, according to our byte-pair encoding, and should not be compared to per-word perplexities.\n\ntrain | PPL | BLEU | params\nN | dmodel | dff | h | dk | dv | Pdrop | ϵls\nsteps | (dev) | (dev) | ×106\nbase | 6 | 512 | 2048 | 8 | 64 | 64 | 0.1 | 0.1 | 100K | 4.92 | 25.8 | 65\n1 | 512 | 512 | 5.29 | 24.9\n4 | 128 | 128 | 5.00 | 25.5\n(A)\n16 | 32 | 32 | 4.91 | 25.8\n32 | 16 | 16 | 5.01 | 25.4\n16 | 5.16 | 25.1 | 58\n(B)\n32 | 5.01 | 25.4 | 60\n2 | 6.11 | 23.7 | 36\n4 | 5.19 | 25.3 | 50\n8 | 4.88 | 25.5 | 80\n(C) | 256 | 32 | 32 | 5.75 | 24.5 | 28\n1024 | 128 | 128 | 4.66 | 26.0 | 168\n1024 | 5.12 | 25.4 | 53\n4096 | 4.75 | 26.2 | 90\n0.0 | 5.77 | 24.6\n0.2 | 4.95 | 25.5\n(D)\n0.0 | 4.67 | 25.3\n0.2 | 5.47 | 25.7\n(E) | positional embedding instead of sinusoids | 4.92 | 25.7\nbig | 6 | 1024 | 4096 | 16 | 0.3 | 300K | 4.33 | 26.4 | 213\n\n[3] (tableau, page 6, score 0.552)\nTable 1: Maximum path lengths, per-layer complexity and minimum number of sequential operations for different layer types. n is the sequence length, d is the representation dimension, k is the kernel size of convolutions and r the size of the neighborhood in restricted self-attention.\n\nLayer Type | Complexity per Layer | Sequential | Maximum Path Length\nOperations\nSelf-Attention | O(n2 · d) | O(1) | O(1)\nRecurrent | O(n · d2) | O(n) | O(n)\nConvolutional | O(k · n · d2) | O(1) | O(logk(n))\nSelf-Attention (restricted) | O(r · n · d) | O(1) | O(n/r)"
+        },
+        {
+          "step": "Answer",
+          "content": "The training cost in FLOPs for English-to-German translation is as follows:\n\n- **Big Transformer**: 2.3 · 10¹⁹ FLOPs (from Table 2, page 8).\n- **ConvS2S Ensemble**: 7.7 · 10¹⁹ FLOPs (from Table 2, page 8).\n\nThus, the big Transformer has a lower training cost in FLOPs compared to the ConvS2S Ensemble. \n\n(Source: Table 2, page 8)"
+        }
+      ],
+      "checks": {
+        "tool_called": true,
+        "n_calls": 1,
+        "modalities": [
+          "table"
+        ],
+        "modality_ok": true,
+        "observed_pages": [
+          6,
+          8,
+          9
+        ],
+        "retrieval_ok": true,
+        "duration_s": 71.1,
+        "images": [],
+        "answer_ok": true,
+        "missing_keywords": []
+      }
+    },
+    {
+      "id": "q5",
+      "category": "figure",
+      "question": "Que représente la Figure 1 de l'article ?",
+      "answer": "La Figure 1 de l'article représente l'architecture du modèle Transformer.",
+      "trace": [
+        {
+          "step": "Action",
+          "tool": "retriever_tool",
+          "arguments": {
+            "query": "what does Figure 1 show in the article",
+            "modality": "all"
+          }
+        },
+        {
+          "step": "Observation",
+          "tool": "retriever_tool",
+          "content": "[1] IMAGE: data/images/a0efa62491d3_p3_img1.png | Page: 3 | Score: 0.239 | référence citée\nFigure 1: The Transformer - model architecture.\n\n[2] (texte, page 9, score 0.846)\n5\n28\n1024\n128\n128\n4.66\n26.0\n168\n1024\n5.12\n25.4\n53\n4096\n4.75\n26.2\n90\n(D)\n0.0\n5.77\n24.6\n0.\n\n[3] (texte, page 9, score 0.837)\n4\n60\n(C)\n2\n6.11\n23.7\n36\n4\n5.19\n25.3\n50\n8\n4.88\n25.5\n80\n256\n32\n32\n5.75\n24.5\n28\n1024\n128\n128\n4.\n\n[4] (texte, page 8, score 0.823)\n1 [30]. This\nhurts perplexity, as the model learns to be more unsure, but improves accuracy and BLEU score.\n6\nResults\n6.1\nMachine Translation\nOn the WMT 2014 English-to-German translation task,\n\n[5] (texte, page 5, score 0.821)\nTo this end, we add \"positional encodings\" to the input embeddings at the\n5\n\n[6] (texte, page 5, score 0.821)\n• Similarly, self-attention layers in the decoder allow each position in the decoder to attend to\nall positions in the decoder up to and including that position. We need to prevent leftward\ninformation ﬂow in the decoder to preserve the auto-regressive property.\n\n[7] IMAGE: data/images/a0efa62491d3_p4_img2.png | Page: 4 | Score: 0.255\nFigure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.\nPartie gauche de la figure : Scaled Dot-Product Attention."
+        },
+        {
+          "step": "Answer",
+          "content": "La Figure 1 de l'article représente l'architecture du modèle Transformer."
+        }
+      ],
+      "checks": {
+        "tool_called": true,
+        "n_calls": 1,
+        "modalities": [
+          "all"
+        ],
+        "modality_ok": true,
+        "observed_pages": [
+          3,
+          4,
+          5,
+          8,
+          9
+        ],
+        "retrieval_ok": true,
+        "duration_s": 26.1,
+        "images": [
+          "data/images/a0efa62491d3_p3_img1.png"
+        ],
+        "answer_ok": false,
+        "missing_keywords": [
+          "encoder",
+          "decoder"
+        ]
+      }
+    },
+    {
+      "id": "q6",
+      "category": "hybride texte + figure",
+      "question": "Explique la Figure 2 : que représentent ses deux parties, et comment fonctionne la multi-head attention ?",
+      "answer": "La Figure 2 représente deux parties principales :\n\n- **Partie gauche** : elle illustre le **Scaled Dot-Product Attention**. Cela correspond à l'attention standard, où chaque position dans une séquence calcule un poids basé sur la similarité entre les éléments de la séquence, puis combine ces poids pour produire une sortie.\n\n- **Partie droite** : elle montre le **Multi-Head Attention**. Ce mécanisme consiste à exécuter plusieurs couches d'attention en parallèle. Chaque \"head\" (tête) applique une attention séparée sur les entrées, ce qui permet de capturer différentes représentations ou relations dans les données. Les résultats de ces différentes têtes sont ensuite combinés pour produire une sortie finale.\n\nAinsi, le Multi-Head Attention permet de paralléliser l'attention, en permettant à chaque head de se concentrer sur une différente forme de relation entre les éléments de la séquence, ce qui améliore la capacité du modèle à comprendre des dépendances complexes. Cette architecture est décrite dans la figure, avec la partie droite précisant que le Multi-Head Attention est composé de plusieurs couches d'attention fonctionnant en parallèle.  \n\n*Source : Figure 2, page 4.*",
+      "trace": [
+        {
+          "step": "Action",
+          "tool": "retriever_tool",
+          "arguments": {
+            "query": "Figure 2 Transformer model architecture two parts and how multi-head attention works",
+            "modality": "all"
+          }
+        },
+        {
+          "step": "Observation",
+          "tool": "retriever_tool",
+          "content": "[1] IMAGE: data/images/a0efa62491d3_p4_img1.png | Page: 4 | Score: 0.282 | référence citée\nFigure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.\nPartie droite de la figure : Multi-Head Attention consists of several attention layers running in parallel.\n\n[2] IMAGE: data/images/a0efa62491d3_p4_img2.png | Page: 4 | Score: 0.266 | référence citée\nFigure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.\nPartie gauche de la figure : Scaled Dot-Product Attention.\n\n[3] (texte, page 3, score 0.867)\nFigure 1: The Transformer - model architecture.\nwise fully connected feed-forward network. We employ a residual connection [10] around each of\nthe two sub-layers, followed by layer normalization [1].\n\n[4] (texte, page 2, score 0.836)\nAt each step the model is auto-regressive\n[9], consuming the previously generated symbols as additional input when generating the next.\nThe Transformer follows this overall architecture using stacked self-attention and point-wise, fully\nconnected layers for both the encoder and decoder, shown in the left and right halves of Figure 1,\nrespectively.\n\n[5] (texte, page 2, score 0.817)\nIn all but a few cases [22], however, such attention mechanisms\nare used in conjunction with a recurrent network.\nIn this work we propose the Transformer, a model architecture eschewing recurrence and instead\nrelying entirely on an attention mechanism to draw global dependencies between input and output.\n\n[6] (texte, page 1, score 0.808)\nWe propose a new simple network architecture, the Transformer,\nbased solely on attention mechanisms, dispensing with recurrence and convolutions\nentirely. Experiments on two machine translation tasks show these models to\nbe superior in quality while being more parallelizable and requiring signiﬁcantly\nless time to train.\n\n[7] (texte, page 5, score 0.798)\nSee Figure 2.\n3.3\nPosition-wise Feed-Forward Networks\nIn addition to attention sub-layers, each of the layers in our encoder and decoder contains a fully\nconnected feed-forward network, which is applied to each position separately and identically. This\nconsists of two linear transformations with a ReLU activation in between."
+        },
+        {
+          "step": "Answer",
+          "content": "La Figure 2 représente deux parties principales :\n\n- **Partie gauche** : elle illustre le **Scaled Dot-Product Attention**. Cela correspond à l'attention standard, où chaque position dans une séquence calcule un poids basé sur la similarité entre les éléments de la séquence, puis combine ces poids pour produire une sortie.\n\n- **Partie droite** : elle montre le **Multi-Head Attention**. Ce mécanisme consiste à exécuter plusieurs couches d'attention en parallèle. Chaque \"head\" (tête) applique une attention séparée sur les entrées, ce qui permet de capturer différentes représentations ou relations dans les données. Les résultats de ces différentes têtes sont ensuite combinés pour produire une sortie finale.\n\nAinsi, le Multi-Head Attention permet de paralléliser l'attention, en permettant à chaque head de se concentrer sur une différente forme de relation entre les éléments de la séquence, ce qui améliore la capacité du modèle à comprendre des dépendances complexes. Cette architecture est décrite dans la figure, avec la partie droite précisant que le Multi-Head Attention est composé de plusieurs couches d'attention fonctionnant en parallèle.  \n\n*Source : Figure 2, page 4.*"
+        }
+      ],
+      "checks": {
+        "tool_called": true,
+        "n_calls": 1,
+        "modalities": [
+          "all"
+        ],
+        "modality_ok": true,
+        "observed_pages": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "retrieval_ok": true,
+        "duration_s": 73.8,
+        "images": [
+          "data/images/a0efa62491d3_p4_img1.png",
+          "data/images/a0efa62491d3_p4_img2.png"
+        ],
+        "answer_ok": true,
+        "missing_keywords": []
+      }
+    },
+    {
+      "id": "q7",
+      "category": "requête par image",
+      "question": "Voici une image : data/images/a0efa62491d3_p4_img2.png. À quel mécanisme de l'article correspond-elle ?",
+      "answer": "L'image data/images/a0efa62491d3_p4_img2.png correspond au mécanisme de **Scaled Dot-Product Attention**, comme indiqué dans la figure 2 de la page 4 de l'article.",
+      "trace": [
+        {
+          "step": "Action",
+          "tool": "retriever_tool",
+          "arguments": {
+            "query": "what mechanism does the image data/images/a0efa62491d3_p4_img2.png correspond to in the paper",
+            "image_path": "data/images/a0efa62491d3_p4_img2.png"
+          }
+        },
+        {
+          "step": "Observation",
+          "tool": "retriever_tool",
+          "content": "[1] (texte, page 5, score 0.326)\nWe implement this\ninside of scaled dot-product attention by masking out (setting to −∞) all values in the input\nof the softmax which correspond to illegal connections. See Figure 2.\n\n[2] (texte, page 4, score 0.318)\nWe compute\nthe matrix of outputs as:\nAttention(Q, K, V ) = softmax(QKT\n√dk\n)V\n(1)\nThe two most commonly used attention functions are additive attention [2], and dot-product (multi-\nplicative) attention.\n\n[3] (texte, page 2, score 0.306)\nThe fundamental\nconstraint of sequential computation, however, remains.\nAttention mechanisms have become an integral part of compelling sequence modeling and transduc-\ntion models in various tasks, allowing modeling of dependencies without regard to their distance in\nthe input or output sequences [2, 16].\n\n[4] (texte, page 5, score 0.306)\n3.4\nEmbeddings and Softmax\nSimilarly to other sequence transduction models, we use learned embeddings to convert the input\ntokens and output tokens to vectors of dimension dmodel. We also use the usual learned linear transfor-\nmation and softmax function to convert the decoder output to predicted next-token probabilities.\n\n[5] (texte, page 2, score 0.305)\nAt each step the model is auto-regressive\n[9], consuming the previously generated symbols as additional input when generating the next.\nThe Transformer follows this overall architecture using stacked self-attention and point-wise, fully\nconnected layers for both the encoder and decoder, shown in the left and right halves of Figure 1,\nrespectively.\n\n[6] IMAGE: data/images/a0efa62491d3_p4_img2.png | Page: 4 | Score: 1.000\nFigure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.\nPartie gauche de la figure : Scaled Dot-Product Attention."
+        },
+        {
+          "step": "Answer",
+          "content": "L'image data/images/a0efa62491d3_p4_img2.png correspond au mécanisme de **Scaled Dot-Product Attention**, comme indiqué dans la figure 2 de la page 4 de l'article."
+        }
+      ],
+      "checks": {
+        "tool_called": true,
+        "n_calls": 1,
+        "modalities": [
+          "all"
+        ],
+        "modality_ok": true,
+        "observed_pages": [
+          2,
+          4,
+          5
+        ],
+        "retrieval_ok": true,
+        "duration_s": 39.2,
+        "images": [
+          "data/images/a0efa62491d3_p4_img2.png"
+        ],
+        "answer_ok": true,
+        "missing_keywords": [],
+        "image_path_used": true
+      }
+    },
+    {
+      "id": "q8",
+      "category": "hors document",
+      "question": "Quel score BLEU obtient GPT-4 sur WMT 2014 anglais-allemand ?",
+      "answer": "L'article « Attention Is All You Need » ne mentionne pas de score BLEU obtenu par GPT-4 sur WMT 2014 anglais-allemand. Les résultats fournis dans les tableaux ne comprennent pas GPT-4, et le modèle GPT-4 n'est pas abordé dans l'article.  \n\nIl est donc impossible de déterminer ce score à partir des données disponibles.",
+      "trace": [
+        {
+          "step": "Action",
+          "tool": "retriever_tool",
+          "arguments": {
+            "query": "BLEU score GPT-4 WMT 2014 English-German",
+            "modality": "table"
+          }
+        },
+        {
+          "step": "Observation",
+          "tool": "retriever_tool",
+          "content": "[1] (tableau, page 8, score 0.704)\nTable 2: The Transformer achieves better BLEU scores than previous state-of-the-art models on the English-to-German and English-to-French newstest2014 tests at a fraction of the training cost.\n\nBLEU | Training Cost (FLOPs)\nModel\nEN-DE | EN-FR | EN-DE | EN-FR\nByteNet [15] | 23.75\nDeep-Att + PosUnk [32] | 39.2 | 1.0 · 1020\nGNMT + RL [31] | 24.6 | 39.92 | 2.3 · 1019 | 1.4 · 1020\nConvS2S [8] | 25.16 | 40.46 | 9.6 · 1018 | 1.5 · 1020\nMoE [26] | 26.03 | 40.56 | 2.0 · 1019 | 1.2 · 1020\nDeep-Att + PosUnk Ensemble [32] | 40.4 | 8.0 · 1020\nGNMT + RL Ensemble [31] | 26.30 | 41.16 | 1.8 · 1020 | 1.1 · 1021\nConvS2S Ensemble [8] | 26.36 | 41.29 | 7.7 · 1019 | 1.2 · 1021\nTransformer (base model) | 27.3 | 38.1 | 3.3 · 1018\nTransformer (big) | 28.4 | 41.0 | 2.3 · 1019\n\n[2] (tableau, page 9, score 0.602)\nTable 3: Variations on the Transformer architecture. Unlisted values are identical to those of the base model. All metrics are on the English-to-German translation development set, newstest2013. Listed perplexities are per-wordpiece, according to our byte-pair encoding, and should not be compared to per-word perplexities.\n\ntrain | PPL | BLEU | params\nN | dmodel | dff | h | dk | dv | Pdrop | ϵls\nsteps | (dev) | (dev) | ×106\nbase | 6 | 512 | 2048 | 8 | 64 | 64 | 0.1 | 0.1 | 100K | 4.92 | 25.8 | 65\n1 | 512 | 512 | 5.29 | 24.9\n4 | 128 | 128 | 5.00 | 25.5\n(A)\n16 | 32 | 32 | 4.91 | 25.8\n32 | 16 | 16 | 5.01 | 25.4\n16 | 5.16 | 25.1 | 58\n(B)\n32 | 5.01 | 25.4 | 60\n2 | 6.11 | 23.7 | 36\n4 | 5.19 | 25.3 | 50\n8 | 4.88 | 25.5 | 80\n(C) | 256 | 32 | 32 | 5.75 | 24.5 | 28\n1024 | 128 | 128 | 4.66 | 26.0 | 168\n1024 | 5.12 | 25.4 | 53\n4096 | 4.75 | 26.2 | 90\n0.0 | 5.77 | 24.6\n0.2 | 4.95 | 25.5\n(D)\n0.0 | 4.67 | 25.3\n0.2 | 5.47 | 25.7\n(E) | positional embedding instead of sinusoids | 4.92 | 25.7\nbig | 6 | 1024 | 4096 | 16 | 0.3 | 300K | 4.33 | 26.4 | 213\n\n[3] (tableau, page 6, score 0.586)\nTable 1: Maximum path lengths, per-layer complexity and minimum number of sequential operations for different layer types. n is the sequence length, d is the representation dimension, k is the kernel size of convolutions and r the size of the neighborhood in restricted self-attention.\n\nLayer Type | Complexity per Layer | Sequential | Maximum Path Length\nOperations\nSelf-Attention | O(n2 · d) | O(1) | O(1)\nRecurrent | O(n · d2) | O(n) | O(n)\nConvolutional | O(k · n · d2) | O(1) | O(logk(n))\nSelf-Attention (restricted) | O(r · n · d) | O(1) | O(n/r)"
+        },
+        {
+          "step": "Answer",
+          "content": "L'article « Attention Is All You Need » ne mentionne pas de score BLEU obtenu par GPT-4 sur WMT 2014 anglais-allemand. Les résultats fournis dans les tableaux ne comprennent pas GPT-4, et le modèle GPT-4 n'est pas abordé dans l'article.  \n\nIl est donc impossible de déterminer ce score à partir des données disponibles."
+        }
+      ],
+      "checks": {
+        "tool_called": true,
+        "n_calls": 1,
+        "modalities": [
+          "table"
+        ],
+        "modality_ok": true,
+        "observed_pages": [
+          6,
+          8,
+          9
+        ],
+        "retrieval_ok": null,
+        "duration_s": 70.8,
+        "images": [],
+        "answer_ok": true
+      }
+    }
+  ]
+}

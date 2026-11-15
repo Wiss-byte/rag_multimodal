@@ -1,0 +1,49 @@
+{
+  "model": "qwen3:1.7b",
+  "date": "20261115-1310",
+  "records": [
+    {
+      "id": "q2",
+      "category": "tableau",
+      "question": "Quel score BLEU le Transformer (big) obtient-il sur la traduction anglais-allemand ?",
+      "answer": "Le Transformer (big) obtient un score BLEU de **28.4** sur la traduction anglais-allemand. Ce score est répertorié dans le tableau page 8, sous la colonne \"BLEU\" pour le modèle Transformer (big).",
+      "trace": [
+        {
+          "step": "Action",
+          "tool": "retriever_tool",
+          "arguments": {
+            "query": "BLEU score Transformer (big) translation English to German",
+            "modality": "table"
+          }
+        },
+        {
+          "step": "Observation",
+          "tool": "retriever_tool",
+          "content": "[1] (tableau, page 8, score 0.763)\nTable 2: The Transformer achieves better BLEU scores than previous state-of-the-art models on the English-to-German and English-to-French newstest2014 tests at a fraction of the training cost.\n\nBLEU | Training Cost (FLOPs)\nModel\nEN-DE | EN-FR | EN-DE | EN-FR\nByteNet [15] | 23.75\nDeep-Att + PosUnk [32] | 39.2 | 1.0 · 1020\nGNMT + RL [31] | 24.6 | 39.92 | 2.3 · 1019 | 1.4 · 1020\nConvS2S [8] | 25.16 | 40.46 | 9.6 · 1018 | 1.5 · 1020\nMoE [26] | 26.03 | 40.56 | 2.0 · 1019 | 1.2 · 1020\nDeep-Att + PosUnk Ensemble [32] | 40.4 | 8.0 · 1020\nGNMT + RL Ensemble [31] | 26.30 | 41.16 | 1.8 · 1020 | 1.1 · 1021\nConvS2S Ensemble [8] | 26.36 | 41.29 | 7.7 · 1019 | 1.2 · 1021\nTransformer (base model) | 27.3 | 38.1 | 3.3 · 1018\nTransformer (big) | 28.4 | 41.0 | 2.3 · 1019\n\n[2] (tableau, page 9, score 0.656)\nTable 3: Variations on the Transformer architecture. Unlisted values are identical to those of the base model. All metrics are on the English-to-German translation development set, newstest2013. Listed perplexities are per-wordpiece, according to our byte-pair encoding, and should not be compared to per-word perplexities.\n\ntrain | PPL | BLEU | params\nN | dmodel | dff | h | dk | dv | Pdrop | ϵls\nsteps | (dev) | (dev) | ×106\nbase | 6 | 512 | 2048 | 8 | 64 | 64 | 0.1 | 0.1 | 100K | 4.92 | 25.8 | 65\n1 | 512 | 512 | 5.29 | 24.9\n4 | 128 | 128 | 5.00 | 25.5\n(A)\n16 | 32 | 32 | 4.91 | 25.8\n32 | 16 | 16 | 5.01 | 25.4\n16 | 5.16 | 25.1 | 58\n(B)\n32 | 5.01 | 25.4 | 60\n2 | 6.11 | 23.7 | 36\n4 | 5.19 | 25.3 | 50\n8 | 4.88 | 25.5 | 80\n(C) | 256 | 32 | 32 | 5.75 | 24.5 | 28\n1024 | 128 | 128 | 4.66 | 26.0 | 168\n1024 | 5.12 | 25.4 | 53\n4096 | 4.75 | 26.2 | 90\n0.0 | 5.77 | 24.6\n0.2 | 4.95 | 25.5\n(D)\n0.0 | 4.67 | 25.3\n0.2 | 5.47 | 25.7\n(E) | positional embedding instead of sinusoids | 4.92 | 25.7\nbig | 6 | 1024 | 4096 | 16 | 0.3 | 300K | 4.33 | 26.4 | 213\n\n[3] (tableau, page 6, score 0.563)\nTable 1: Maximum path lengths, per-layer complexity and minimum number of sequential operations for different layer types. n is the sequence length, d is the representation dimension, k is the kernel size of convolutions and r the size of the neighborhood in restricted self-attention.\n\nLayer Type | Complexity per Layer | Sequential | Maximum Path Length\nOperations\nSelf-Attention | O(n2 · d) | O(1) | O(1)\nRecurrent | O(n · d2) | O(n) | O(n)\nConvolutional | O(k · n · d2) | O(1) | O(logk(n))\nSelf-Attention (restricted) | O(r · n · d) | O(1) | O(n/r)"
+        },
+        {
+          "step": "Answer",
+          "content": "Le Transformer (big) obtient un score BLEU de **28.4** sur la traduction anglais-allemand. Ce score est répertorié dans le tableau page 8, sous la colonne \"BLEU\" pour le modèle Transformer (big)."
+        }
+      ],
+      "checks": {
+        "tool_called": true,
+        "n_calls": 1,
+        "modalities": [
+          "table"
+        ],
+        "modality_ok": true,
+        "observed_pages": [
+          6,
+          8,
+          9
+        ],
+        "retrieval_ok": true,
+        "duration_s": 31.9,
+        "images": [],
+        "answer_ok": true,
+        "missing_keywords": []
+      }
+    }
+  ]
+}

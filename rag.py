@@ -1,11 +1,11 @@
-
 """
-Point d'entrée CLI du RAG multimodal.
+Point d'entrée CLI de l'agent RAG multimodal.
+Affiche le cycle ReAct (Action / Observation / Answer) puis la réponse.
 """
 
 import sys
 
-from graph_agent import ask
+from graph_agent import run_agent, format_trace
 
 
 def main():
@@ -19,35 +19,31 @@ def main():
 
     question = " ".join(sys.argv[1:])
 
-    history = [
+    result = run_agent([
         {
             "role": "user",
             "content": question,
         }
-    ]
+    ])
 
-    answer, calls, outputs, images = ask(history)
+    print("=" * 60)
+    print("CYCLE ReAct")
+    print("=" * 60)
+
+    print(format_trace(result["trace"]))
 
     print("\n" + "=" * 60)
     print("REPONSE DE L'AGENT")
     print("=" * 60)
 
-    print(answer)
+    print(result["answer"])
 
-    print("\nOUTILS APPELES :")
+    if result["images"]:
 
-    for call in calls:
-        print(call)
+        print("\nIMAGES A AFFICHER :")
 
-    print("\nOBSERVATIONS :")
-
-    for output in outputs:
-        print(output)
-
-    print("\nIMAGES TROUVEES :")
-
-    for image in images:
-        print(image)
+        for image in result["images"]:
+            print(" -", image)
 
 
 if __name__ == "__main__":
