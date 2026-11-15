@@ -1,18 +1,26 @@
 
 """
-RAG multimodal :
-- Recherche texte vers texte
-- Recherche texte vers image
-- Recherche image vers image
-- Outils pour l'agent LangGraph
+AGENT RAG MULTIMODAL.
+
+Recherche :
+1. Texte -> Texte
+2. Texte -> Image
+3. Image -> Texte
+4. Image -> Image
+
+Outils :
+- search_text
+- search_tables
+- search_images
+
+Embeddings : CLIP ViT-B-32 (512D)
+Base vectorielle : PostgreSQL / PGVector
 """
 
 import re
-from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image
-from sentence_transformers import SentenceTransformer
 
 from langchain.tools import tool
 
@@ -22,15 +30,20 @@ from llama_index.core.vector_stores import (
     VectorStoreQuery,
 )
 
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.postgres import PGVectorStore
+
+from clip_embeddings import (
+    encode_text,
+    encode_image,
+    EMBEDDING_DIM,
+)
 
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
-DB = {
+DB_CONFIG = {
     "host": "localhost",
     "port": 5433,
     "database": "rag",
@@ -38,34 +51,24 @@ DB = {
     "password": "rag",
 }
 
-# Modèle textuel : 384 dimensions
-embed = HuggingFaceEmbedding(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
-
-# Modèle multimodal : 512 dimensions
-@lru_cache(maxsize=1)
-def clip_model():
-    return SentenceTransformer("clip-ViT-B-32")
+TEXT_TABLE = "text_chunks_clip"
+IMAGE_TABLE = "image_clip"
 
 
-# Bases vectorielles
+# ============================================================
+# BASES VECTORIELLES
+# ============================================================
+
 store_text = PGVectorStore.from_params(
-    table_name="text_chunks",
-    embed_dim=384,
-    **DB,
+    table_name=TEXT_TABLE,
+    embed_dim=EMBEDDING_DIM,
+    **DB_CONFIG,
 )
 
-store_caps = PGVectorStore.from_params(
-    table_name="image_captions",
-    embed_dim=384,
-    **DB,
-)
-
-store_clip = PGVectorStore.from_params(
-    table_name="image_clip",
-    embed_dim=512,
-    **DB,
+store_images = PGVectorStore.from_params(
+    table_name=IMAGE_TABLE,
+    embed_dim=EMBEDDING_DIM,
+    **DB_CONFIG,
 )
 
 
@@ -73,16 +76,23 @@ store_clip = PGVectorStore.from_params(
 # RECHERCHE VECTORIELLE GENERIQUE
 # ============================================================
 
-def vector_search(store, vector, k=3, doc_type=None):
+def vector_search(
+    store,
+    vector: list[float],
+    k: int = 3,
+    doc_type: str | None = None,
+):
+    """Recherche par similarité cosinus via PGVector."""
 
     filters = None
 
     if doc_type:
+
         filters = MetadataFilters(
             filters=[
                 MetadataFilter(
                     key="type",
-                    value=doc_type
+                    value=doc_type,
                 )
             ]
         )
@@ -97,72 +107,87 @@ def vector_search(store, vector, k=3, doc_type=None):
 
 
 # ============================================================
-# 1. TEXTE VERS TEXTE
+# 1. TEXTE -> TEXTE
 # ============================================================
 
-def retrieve_text(query: str, k: int = 4):
+def retrieve_text(
+    query: str,
+    k: int = 4,
+):
+    """Recherche des chunks textuels à partir d'une question."""
 
-    vector = embed.get_query_embedding(query)
+    vector = encode_text(query)
 
     result = vector_search(
         store_text,
         vector,
         k,
-        "text"
+        doc_type="text",
     )
 
     return result.nodes
 
 
 # ============================================================
-# 2. TEXTE VERS IMAGE
+# 2. TEXTE -> IMAGE
 # ============================================================
 
-def retrieve_images_from_text(query: str, k: int = 3):
+def retrieve_images_from_text(
+    query: str,
+    k: int = 3,
+):
+    """Recherche les images à partir d'une description textuelle."""
 
-    # Embedding CLIP du texte
-    vector = clip_model().encode(
-        query,
-        normalize_embeddings=True
-    ).tolist()
+    vector = encode_text(query)
 
     result = vector_search(
-        store_clip,
+        store_images,
         vector,
-        k
+        k,
+        doc_type="image",
     )
 
     return result.nodes
 
 
 # ============================================================
-# 3. IMAGE VERS IMAGE
+# 3. IMAGE -> TEXTE
 # ============================================================
 
-def search_similar_images(image_path: str, k: int = 3):
+def retrieve_text_from_image(
+    image_path: str,
+    k: int = 4,
+):
+    """Recherche les passages textuels associés à une image."""
 
-    path = Path(image_path)
+    vector = encode_image(image_path)
 
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Image introuvable : {image_path}"
-        )
-
-    # Charger l'image
-    with Image.open(path) as image:
-        image = image.convert("RGB")
-
-        # Générer l'embedding CLIP normalisé
-        vector = clip_model().encode(
-            image,
-            normalize_embeddings=True
-        ).tolist()
-
-    # Recherche dans PGVector
     result = vector_search(
-        store_clip,
+        store_text,
         vector,
-        k
+        k,
+    )
+
+    return result.nodes
+
+
+# ============================================================
+# 4. IMAGE -> IMAGE
+# ============================================================
+
+def search_similar_images(
+    image_path: str,
+    k: int = 3,
+):
+    """Recherche les images visuellement similaires."""
+
+    vector = encode_image(image_path)
+
+    result = vector_search(
+        store_images,
+        vector,
+        k,
+        doc_type="image",
     )
 
     results = []
@@ -178,8 +203,9 @@ def search_similar_images(image_path: str, k: int = 3):
         )
 
         results.append({
-            "image_path": node.metadata["image_path"],
-            "page": node.metadata["page"],
+            "image_path": node.metadata.get("image_path"),
+            "page": node.metadata.get("page"),
+            "document_id": node.metadata.get("document_id"),
             "score": score,
         })
 
@@ -187,86 +213,108 @@ def search_similar_images(image_path: str, k: int = 3):
 
 
 # ============================================================
-# OUTILS DE L'AGENT
+# FORMATAGE DES RESULTATS
+# ============================================================
+
+def format_text_results(nodes) -> str:
+
+    if not nodes:
+        return "Aucun résultat textuel trouvé."
+
+    return "\n\n".join(
+        (
+            f"[Page {node.metadata.get('page', '?')}] "
+            f"{node.get_content()}"
+        )
+        for node in nodes
+    )
+
+
+def format_image_results(nodes) -> str:
+
+    if not nodes:
+        return "Aucune image trouvée."
+
+    results = []
+
+    for node in nodes:
+
+        path = node.metadata.get("image_path", "")
+
+        page = node.metadata.get("page", "?")
+
+        results.append(
+            f"IMAGE: {path} | Page: {page}"
+        )
+
+    return "\n".join(results)
+
+
+# ============================================================
+# OUTIL 1 : RECHERCHE TEXTUELLE
 # ============================================================
 
 @tool
 def search_text(query: str) -> str:
-    """Recherche les passages textuels du PDF."""
+    """
+    Recherche les passages textuels du PDF.
 
-    nodes = retrieve_text(query)
+    Utiliser pour les définitions, concepts,
+    explications et descriptions de méthodes.
+    """
 
-    return "\n\n".join(
-        f"[Page {node.metadata['page']}] "
-        f"{node.get_content()}"
-        for node in nodes
-    ) or "Aucun résultat textuel."
+    nodes = retrieve_text(query, k=4)
 
+    return format_text_results(nodes)
+
+
+# ============================================================
+# OUTIL 2 : RECHERCHE DE TABLEAUX
+# ============================================================
 
 @tool
 def search_tables(query: str) -> str:
-    """Recherche les tableaux et résultats numériques du PDF."""
+    """
+    Recherche les tableaux du PDF.
 
-    vector = embed.get_query_embedding(query)
+    Utiliser pour les scores, résultats numériques,
+    comparaisons et données expérimentales.
+    """
+
+    vector = encode_text(query)
 
     result = vector_search(
         store_text,
         vector,
-        3,
-        "table"
+        k=4,
+        doc_type="table",
     )
 
-    return "\n\n".join(
-        f"[Page {node.metadata['page']}]\n"
-        f"{node.get_content()}"
-        for node in result.nodes
-    ) or "Aucun tableau trouvé."
+    return format_text_results(result.nodes)
 
+
+# ============================================================
+# OUTIL 3 : RECHERCHE D'IMAGES
+# ============================================================
 
 @tool
 def search_images(query: str) -> str:
-    """Recherche les figures et illustrations du PDF à partir d'une description textuelle."""
+    """
+    Recherche les figures et les schémas du PDF
+    à partir d'une description textuelle.
 
-    found = {}
+    Utiliser pour les architectures, diagrammes,
+    illustrations et représentations visuelles.
+    """
 
-    # Recherche par descriptions
-    vector = embed.get_query_embedding(query)
+    nodes = retrieve_images_from_text(query, k=4)
 
-    result = vector_search(
-        store_caps,
-        vector,
-        3
-    )
+    return format_image_results(nodes)
 
-    for node in result.nodes:
 
-        path = node.metadata["image_path"]
-
-        found[path] = (
-            node.metadata["page"],
-            node.get_content()[:300]
-        )
-
-    # Recherche avec CLIP
-    nodes = retrieve_images_from_text(query, 3)
-
-    for node in nodes:
-
-        path = node.metadata["image_path"]
-
-        found.setdefault(
-            path,
-            (
-                node.metadata["page"],
-                "Résultat trouvé par CLIP"
-            )
-        )
-
-    return "\n".join(
-        f"IMAGE: {path} | Page: {page} | {description}"
-        for path, (page, description) in found.items()
-    ) or "Aucune image trouvée."
-
+# ============================================================
+# OUTILS DE L'AGENT
+# ============================================================
 
 TOOLS = [
     search_text,
@@ -279,13 +327,17 @@ TOOLS = [
 # EXTRACTION DES IMAGES D'UNE REPONSE
 # ============================================================
 
-def extract_images(outputs):
+def extract_images(outputs) -> list[str]:
+    """Récupère les chemins d'images dans les observations."""
 
-    text = "\n".join(str(output) for output in outputs)
+    text = "\n".join(
+        str(output)
+        for output in outputs
+    )
 
     paths = re.findall(
-        r"IMAGE:\s*(\S+)",
-        text
+        r"IMAGE:\s*(.+?)\s*\|\s*Page:",
+        text,
     )
 
     return list(dict.fromkeys(paths))
