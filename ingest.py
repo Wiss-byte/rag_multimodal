@@ -1,107 +1,383 @@
-"""Extraction (texte, tableaux, figures) d'un PDF avec LlamaIndex + embeddings open source -> PGVector.
-Usage : uv run python ingest.py [chemin_du_pdf]"""
+
+"""
+INGESTION PDF - MULTIMODAL RAG
+
+Fonctionnalités :
+1. Extraction du texte PDF.
+2. Découpage en chunks.
+3. Extraction des tableaux.
+4. Embeddings textuels MiniLM.
+5. Indexation dans PostgreSQL / PGVector.
+6. Identification du document par SHA-256.
+"""
+
 import sys
+import hashlib
+import logging
+
 from pathlib import Path
 
-import pymupdf
-from llama_index.core import StorageContext, VectorStoreIndex
+import fitz
+
+from llama_index.core import Document, VectorStoreIndex, StorageContext
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import TextNode
+
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.readers.file import PyMuPDFReader
 from llama_index.vector_stores.postgres import PGVectorStore
 
-PDF = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("data/attention.pdf")
-IMG_DIR = Path("data/images")
-IMG_DIR.mkdir(parents=True, exist_ok=True)
-for old in IMG_DIR.glob("*.png"):          # efface les figures d'un PDF precedent
-    old.unlink()
 
-# ---------------------------------------------------------------- 1. TEXTE (LlamaIndex)
-# Un Document par page ; metadonnees courtes (type, page, source)
-docs = PyMuPDFReader().load_data(file_path=PDF)
-for d in docs:
-    page = int(d.metadata["source"])
-    d.metadata = {"type": "text", "page": page, "source": PDF.name}
+# ============================================================
+# 1. CONFIGURATION
+# ============================================================
 
-# MiniLM tronque a ~256 tokens -> chunks courts
-splitter = SentenceSplitter(chunk_size=200, chunk_overlap=30)
-text_nodes = splitter.get_nodes_from_documents(docs)
-print(f"Texte : {len(docs)} pages -> {len(text_nodes)} chunks")
+DB_CONFIG = {
+    "host": "localhost",
+    "port": 5433,
+    "database": "rag",
+    "user": "rag",
+    "password": "rag",
+}
 
+EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-# ---------------------------------------------------------------- 2. TABLEAUX (PyMuPDF -> Markdown)
-def to_markdown(rows):
-    """Convertit un tableau (liste de lignes) en tableau Markdown."""
-    rows = [[(c or "").replace("\n", " ").strip() for c in r] for r in rows if r]
-    if len(rows) < 2:
-        return ""
-    w = max(len(r) for r in rows)
-    rows = [r + [""] * (w - len(r)) for r in rows]
-    md = "| " + " | ".join(rows[0]) + " |\n|" + "---|" * w + "\n"
-    return md + "\n".join("| " + " | ".join(r) + " |" for r in rows[1:])
+EMBED_DIM = 384
+
+CHUNK_SIZE = 512
+CHUNK_OVERLAP = 50
+
+IMAGE_DIR = Path("data/images")
+
+IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-table_nodes, table_boxes = [], {}      # table_boxes[page] = [bbox...] (pour exclure des figures)
-doc_tables = pymupdf.open(PDF)
-for i, page in enumerate(doc_tables, 1):
-    for t in page.find_tables(strategy="lines").tables:
-        md = to_markdown(t.extract())
-        if md:
-            table_boxes.setdefault(i, []).append(tuple(t.bbox))
-            table_nodes.append(TextNode(
-                text=md, metadata={"type": "table", "page": i, "source": PDF.name}))
-print(f"Tableaux : {len(table_nodes)}")
-for n in table_nodes:
-    print(f"--- page {n.metadata['page']} ---\n{n.text[:300]}\n")
+# ============================================================
+# 2. LOGGING
+# ============================================================
 
-
-# ---------------------------------------------------------------- 3. FIGURES (PyMuPDF)
-# Les figures de l'article sont vectorielles : on regroupe les tracés et on rend la zone en PNG
-def inside(r, b):
-    """Le centre du rectangle r est-il dans la boite b ?"""
-    cx, cy = (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2
-    return b[0] <= cx <= b[2] and b[1] <= cy <= b[3]
-
-
-images = []   # (page, chemin)
-doc = pymupdf.open(PDF)
-for i, page in enumerate(doc, 1):
-    rects = [pymupdf.Rect(r) for r in page.cluster_drawings()]
-    for xref in {im[0] for im in page.get_images(full=True)}:
-        rects += [pymupdf.Rect(r) for r in page.get_image_rects(xref)]
-    kept = []
-    for r in sorted(rects, key=lambda r: -r.get_area()):
-        if r.width < 100 or r.height < 80:
-            continue                                            # icones, filets
-        if any(inside(r, b) for b in table_boxes.get(i, [])):
-            continue                                            # c'est un tableau
-        if any(k.contains(r) for k in kept):
-            continue                                            # doublon
-        kept.append(r)
-    for k, r in enumerate(kept, 1):
-        clip = pymupdf.Rect(r.x0 - 4, r.y0 - 4, r.x1 + 4, r.y1 + 4) & page.rect
-        out = IMG_DIR / f"p{i}_{k}.png"
-        page.get_pixmap(clip=clip, dpi=110).save(out)
-        images.append((i, out.as_posix()))
-print(f"Images : {len(images)} -> {images}")
-
-
-# ---------------------------------------------------------------- 4. EMBEDDINGS + PGVECTOR
-embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")  # 384 dim
-
-vector_store = PGVectorStore.from_params(
-    host="localhost", port=5433, database="rag", user="rag", password="rag",
-    table_name="text_chunks",          # table reelle : data_text_chunks
-    embed_dim=384,
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s - %(message)s"
 )
-vector_store.clear()                    # evite les doublons si on relance
 
-storage_context = StorageContext.from_defaults(vector_store=vector_store)
-VectorStoreIndex(
-    text_nodes + table_nodes,
-    storage_context=storage_context,
-    embed_model=embed_model,
-    show_progress=True,
+logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# 3. IDENTIFICATION SHA-256
+# ============================================================
+
+def calculate_document_id(pdf_path: Path) -> str:
+    """
+    Calcule l'empreinte SHA-256 du document PDF.
+    """
+
+    sha256 = hashlib.sha256()
+
+    with pdf_path.open("rb") as file:
+
+        for block in iter(
+            lambda: file.read(1024 * 1024),
+            b""
+        ):
+
+            sha256.update(block)
+
+    return sha256.hexdigest()
+
+
+# ============================================================
+# 4. INITIALISATION DU MODELE D'EMBEDDING
+# ============================================================
+
+logger.info("Chargement du modèle MiniLM...")
+
+embed_model = HuggingFaceEmbedding(
+    model_name=EMBED_MODEL
 )
-print("Indexation terminee.")
+
+
+# ============================================================
+# 5. INITIALISATION DES BASES VECTORIELLES
+# ============================================================
+
+def create_vector_store(table_name: str):
+
+    return PGVectorStore.from_params(
+        table_name=table_name,
+        embed_dim=EMBED_DIM,
+        **DB_CONFIG
+    )
+
+
+text_store = create_vector_store("text_chunks")
+
+caption_store = create_vector_store("image_captions")
+
+
+# ============================================================
+# 6. EXTRACTION DU TEXTE PDF
+# ============================================================
+
+def extract_pdf_text(pdf_path: Path, document_id: str):
+
+    logger.info("Extraction du texte PDF...")
+
+    pdf = fitz.open(pdf_path)
+
+    documents = []
+
+    for page_number, page in enumerate(pdf, start=1):
+
+        text = page.get_text("text").strip()
+
+        if not text:
+            continue
+
+        documents.append(
+            Document(
+                text=text,
+                metadata={
+                    "type": "text",
+                    "page": page_number,
+                    "source": pdf_path.name,
+                    "document_id": document_id,
+                }
+            )
+        )
+
+    pdf.close()
+
+    logger.info(
+        "%s pages contenant du texte extraites.",
+        len(documents)
+    )
+
+    return documents
+
+
+# ============================================================
+# 7. DECOUPAGE EN CHUNKS
+# ============================================================
+
+def split_documents(documents):
+
+    logger.info("Découpage du texte en chunks...")
+
+    splitter = SentenceSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP
+    )
+
+    nodes = splitter.get_nodes_from_documents(
+        documents,
+        show_progress=True
+    )
+
+    for node in nodes:
+
+        node.metadata["type"] = "text"
+
+    logger.info("%s chunks générés.", len(nodes))
+
+    return nodes
+
+
+# ============================================================
+# 8. EXTRACTION DES TABLEAUX
+# ============================================================
+
+def extract_tables(pdf_path: Path, document_id: str):
+
+    logger.info("Extraction des tableaux...")
+
+    pdf = fitz.open(pdf_path)
+
+    table_nodes = []
+
+    for page_number, page in enumerate(pdf, start=1):
+
+        try:
+
+            tables = page.find_tables()
+
+            for table_index, table in enumerate(tables.tables):
+
+                rows = table.extract()
+
+                if not rows:
+                    continue
+
+                # Conversion du tableau en texte Markdown
+                headers = rows[0]
+
+                markdown = "| " + " | ".join(
+                    str(cell or "") for cell in headers
+                ) + " |\n"
+
+                markdown += "| " + " | ".join(
+                    ["---"] * len(headers)
+                ) + " |\n"
+
+                for row in rows[1:]:
+
+                    markdown += "| " + " | ".join(
+                        str(cell or "") for cell in row
+                    ) + " |\n"
+
+                table_nodes.append(
+                    TextNode(
+                        text=markdown,
+                        metadata={
+                            "type": "table",
+                            "page": page_number,
+                            "source": pdf_path.name,
+                            "document_id": document_id,
+                            "table_index": table_index,
+                        }
+                    )
+                )
+
+        except Exception as error:
+
+            logger.warning(
+                "Erreur page %s : %s",
+                page_number,
+                error
+            )
+
+    pdf.close()
+
+    logger.info(
+        "%s tableaux extraits.",
+        len(table_nodes)
+    )
+
+    return table_nodes
+
+
+# ============================================================
+# 9. INDEXATION DES CHUNKS TEXTUELS
+# ============================================================
+
+def index_text_nodes(nodes):
+
+    if not nodes:
+
+        logger.warning("Aucun chunk textuel à indexer.")
+
+        return
+
+    logger.info("Indexation des chunks textuels...")
+
+    storage_context = StorageContext.from_defaults(
+        vector_store=text_store
+    )
+
+    VectorStoreIndex(
+        nodes,
+        storage_context=storage_context,
+        embed_model=embed_model,
+        show_progress=True
+    )
+
+    logger.info("Indexation textuelle terminée.")
+
+
+# ============================================================
+# 10. INDEXATION DES TABLEAUX
+# ============================================================
+
+def index_table_nodes(nodes):
+
+    if not nodes:
+
+        logger.warning("Aucun tableau à indexer.")
+
+        return
+
+    logger.info("Indexation des tableaux...")
+
+    storage_context = StorageContext.from_defaults(
+        vector_store=text_store
+    )
+
+    VectorStoreIndex(
+        nodes,
+        storage_context=storage_context,
+        embed_model=embed_model,
+        show_progress=True
+    )
+
+    logger.info("Indexation des tableaux terminée.")
+
+
+# ============================================================
+# 11. PIPELINE PRINCIPAL
+# ============================================================
+
+def ingest_pdf(pdf_path: str):
+
+    path = Path(pdf_path)
+
+    if not path.exists():
+
+        raise FileNotFoundError(
+            f"PDF introuvable : {path}"
+        )
+
+    if path.suffix.lower() != ".pdf":
+
+        raise ValueError("Le fichier doit être un PDF.")
+
+    logger.info("=" * 55)
+    logger.info("DEMARRAGE DE L'INGESTION")
+    logger.info("=" * 55)
+
+    # Etape 1 : SHA-256
+    document_id = calculate_document_id(path)
+
+    logger.info("Document ID : %s", document_id)
+
+    # Etape 2 : extraction texte
+    documents = extract_pdf_text(
+        path,
+        document_id
+    )
+
+    # Etape 3 : découpage
+    text_nodes = split_documents(documents)
+
+    # Etape 4 : extraction tableaux
+    table_nodes = extract_tables(
+        path,
+        document_id
+    )
+
+    # Etape 5 : indexation
+    index_text_nodes(text_nodes)
+
+    index_table_nodes(table_nodes)
+
+    logger.info("=" * 55)
+    logger.info("INGESTION TERMINEE")
+    logger.info("Chunks : %s", len(text_nodes))
+    logger.info("Tableaux : %s", len(table_nodes))
+    logger.info("=" * 55)
+
+
+# ============================================================
+# 12. EXECUTION
+# ============================================================
+
+if __name__ == "__main__":
+
+    if len(sys.argv) < 2:
+
+        print(
+            "Usage : uv run python ingest.py chemin/vers/document.pdf"
+        )
+
+        sys.exit(1)
+
+    ingest_pdf(sys.argv[1])

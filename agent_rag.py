@@ -1,101 +1,291 @@
-"""RAG agentique : un agent LangChain (Qwen/Ollama) choisit parmi 3 outils de recherche PGVector."""
-import re
-import sys
-from functools import lru_cache
 
-from langchain.agents import create_agent
-from langchain.tools import tool
-from langchain_ollama import ChatOllama
-from llama_index.core.vector_stores import MetadataFilter, MetadataFilters, VectorStoreQuery
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.vector_stores.postgres import PGVectorStore
+"""
+RAG multimodal :
+- Recherche texte vers texte
+- Recherche texte vers image
+- Recherche image vers image
+- Outils pour l'agent LangGraph
+"""
+
+import re
+from functools import lru_cache
+from pathlib import Path
+
+from PIL import Image
 from sentence_transformers import SentenceTransformer
 
-LLM = "qwen3:1.7b"
-DB = dict(host="localhost", port=5433, database="rag", user="rag", password="rag")
+from langchain.tools import tool
 
-embed = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
-store_text = PGVectorStore.from_params(table_name="text_chunks", embed_dim=384, **DB)
-store_caps = PGVectorStore.from_params(table_name="image_captions", embed_dim=384, **DB)
-store_clip = PGVectorStore.from_params(table_name="image_clip", embed_dim=512, **DB)
+from llama_index.core.vector_stores import (
+    MetadataFilter,
+    MetadataFilters,
+    VectorStoreQuery,
+)
+
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.vector_stores.postgres import PGVectorStore
 
 
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
+DB = {
+    "host": "localhost",
+    "port": 5433,
+    "database": "rag",
+    "user": "rag",
+    "password": "rag",
+}
+
+# Modèle textuel : 384 dimensions
+embed = HuggingFaceEmbedding(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
+
+# Modèle multimodal : 512 dimensions
 @lru_cache(maxsize=1)
 def clip_model():
     return SentenceTransformer("clip-ViT-B-32")
 
 
-def _search(store, vec, k, doc_type=None):
-    """Recherche vectorielle, avec filtre optionnel sur la metadonnee 'type' (text / table)."""
+# Bases vectorielles
+store_text = PGVectorStore.from_params(
+    table_name="text_chunks",
+    embed_dim=384,
+    **DB,
+)
+
+store_caps = PGVectorStore.from_params(
+    table_name="image_captions",
+    embed_dim=384,
+    **DB,
+)
+
+store_clip = PGVectorStore.from_params(
+    table_name="image_clip",
+    embed_dim=512,
+    **DB,
+)
+
+
+# ============================================================
+# RECHERCHE VECTORIELLE GENERIQUE
+# ============================================================
+
+def vector_search(store, vector, k=3, doc_type=None):
+
     filters = None
+
     if doc_type:
-        filters = MetadataFilters(filters=[MetadataFilter(key="type", value=doc_type)])
-    q = VectorStoreQuery(query_embedding=vec, similarity_top_k=k, filters=filters)
-    return store.query(q).nodes
+        filters = MetadataFilters(
+            filters=[
+                MetadataFilter(
+                    key="type",
+                    value=doc_type
+                )
+            ]
+        )
+
+    query = VectorStoreQuery(
+        query_embedding=vector,
+        similarity_top_k=k,
+        filters=filters,
+    )
+
+    return store.query(query)
 
 
-# ---------------------------------------------------------------- les 3 outils de l'agent
+# ============================================================
+# 1. TEXTE VERS TEXTE
+# ============================================================
+
+def retrieve_text(query: str, k: int = 4):
+
+    vector = embed.get_query_embedding(query)
+
+    result = vector_search(
+        store_text,
+        vector,
+        k,
+        "text"
+    )
+
+    return result.nodes
+
+
+# ============================================================
+# 2. TEXTE VERS IMAGE
+# ============================================================
+
+def retrieve_images_from_text(query: str, k: int = 3):
+
+    # Embedding CLIP du texte
+    vector = clip_model().encode(
+        query,
+        normalize_embeddings=True
+    ).tolist()
+
+    result = vector_search(
+        store_clip,
+        vector,
+        k
+    )
+
+    return result.nodes
+
+
+# ============================================================
+# 3. IMAGE VERS IMAGE
+# ============================================================
+
+def search_similar_images(image_path: str, k: int = 3):
+
+    path = Path(image_path)
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Image introuvable : {image_path}"
+        )
+
+    # Charger l'image
+    with Image.open(path) as image:
+        image = image.convert("RGB")
+
+        # Générer l'embedding CLIP normalisé
+        vector = clip_model().encode(
+            image,
+            normalize_embeddings=True
+        ).tolist()
+
+    # Recherche dans PGVector
+    result = vector_search(
+        store_clip,
+        vector,
+        k
+    )
+
+    results = []
+
+    similarities = result.similarities or []
+
+    for index, node in enumerate(result.nodes):
+
+        score = (
+            float(similarities[index])
+            if index < len(similarities)
+            else None
+        )
+
+        results.append({
+            "image_path": node.metadata["image_path"],
+            "page": node.metadata["page"],
+            "score": score,
+        })
+
+    return results
+
+
+# ============================================================
+# OUTILS DE L'AGENT
+# ============================================================
+
 @tool
 def search_text(query: str) -> str:
-    """Search text passages of the PDF: concepts, explanations, definitions, methods."""
-    nodes = _search(store_text, embed.get_query_embedding(query), 4, "text")
-    return "\n\n".join(f"[page {n.metadata['page']}] {n.get_content()}" for n in nodes) or "No result."
+    """Recherche les passages textuels du PDF."""
+
+    nodes = retrieve_text(query)
+
+    return "\n\n".join(
+        f"[Page {node.metadata['page']}] "
+        f"{node.get_content()}"
+        for node in nodes
+    ) or "Aucun résultat textuel."
 
 
 @tool
 def search_tables(query: str) -> str:
-    """Search tables of the PDF: numeric results, BLEU scores, costs, hyperparameters."""
-    nodes = _search(store_text, embed.get_query_embedding(query), 2, "table")
-    return "\n\n".join(f"[page {n.metadata['page']}] TABLE:\n{n.get_content()}" for n in nodes) or "No table."
+    """Recherche les tableaux et résultats numériques du PDF."""
+
+    vector = embed.get_query_embedding(query)
+
+    result = vector_search(
+        store_text,
+        vector,
+        3,
+        "table"
+    )
+
+    return "\n\n".join(
+        f"[Page {node.metadata['page']}]\n"
+        f"{node.get_content()}"
+        for node in result.nodes
+    ) or "Aucun tableau trouvé."
 
 
 @tool
 def search_images(query: str) -> str:
-    """Search figures and diagrams of the PDF: architecture, schemas, illustrations."""
+    """Recherche les figures et illustrations du PDF à partir d'une description textuelle."""
+
     found = {}
-    # 1) par description textuelle
-    for n in _search(store_caps, embed.get_query_embedding(query), 1):
-        found[n.metadata["image_path"]] = (n.metadata["page"], n.get_content()[:300])
-    # 2) par CLIP (texte -> image)
-    qv = clip_model().encode(query, normalize_embeddings=True).tolist()
-    for n in _search(store_clip, qv, 1):
-        found.setdefault(n.metadata["image_path"], (n.metadata["page"], "(found by CLIP)"))
-    return "\n".join(f"IMAGE: {p} | page {pg} | description: {d}" for p, (pg, d) in found.items()) or "No image."
+
+    # Recherche par descriptions
+    vector = embed.get_query_embedding(query)
+
+    result = vector_search(
+        store_caps,
+        vector,
+        3
+    )
+
+    for node in result.nodes:
+
+        path = node.metadata["image_path"]
+
+        found[path] = (
+            node.metadata["page"],
+            node.get_content()[:300]
+        )
+
+    # Recherche avec CLIP
+    nodes = retrieve_images_from_text(query, 3)
+
+    for node in nodes:
+
+        path = node.metadata["image_path"]
+
+        found.setdefault(
+            path,
+            (
+                node.metadata["page"],
+                "Résultat trouvé par CLIP"
+            )
+        )
+
+    return "\n".join(
+        f"IMAGE: {path} | Page: {page} | {description}"
+        for path, (page, description) in found.items()
+    ) or "Aucune image trouvée."
 
 
-SYSTEM = """Tu es un assistant qui repond aux questions sur un document PDF.
-Regles :
-- Utilise TOUJOURS au moins un outil avant de repondre. Ne reponds qu'a partir des resultats des outils.
-- Le document est en anglais : formule les requetes des outils en ANGLAIS.
-- search_text : concepts et explications. search_tables : chiffres, scores, comparaisons.
-  search_images : figures et schemas. Tu peux appeler plusieurs outils.
-- N'utilise search_images que si la question porte sur une figure, un schema ou une architecture.
-- Reponds dans la langue de l'utilisateur, de facon concise, et cite les pages sources, ex. (p. 3).
-- Si l'information est absente des resultats, dis-le."""
+TOOLS = [
+    search_text,
+    search_tables,
+    search_images,
+]
 
 
-@lru_cache(maxsize=1)
-def get_agent():
-    llm = ChatOllama(model=LLM, temperature=0, reasoning=False)
-    return create_agent(llm, [search_text, search_tables, search_images], system_prompt=SYSTEM)
+# ============================================================
+# EXTRACTION DES IMAGES D'UNE REPONSE
+# ============================================================
 
+def extract_images(outputs):
 
-def ask(history: list[dict]):
-    """history = [{'role': 'user'|'assistant', 'content': ...}, ...]  (gestion du contexte).
-    Retourne (reponse, outils_appeles, resultats_des_outils, images) pour le dernier tour."""
-    msgs = get_agent().invoke({"messages": history})["messages"]
-    last = max(i for i, m in enumerate(msgs) if m.type == "human")
-    calls, outputs = [], []
-    for m in msgs[last + 1:]:
-        if m.type == "ai":
-            calls += [f"{c['name']}({c['args'].get('query', '')!r})" for c in (m.tool_calls or [])]
-        elif m.type == "tool":
-            outputs.append(m.content)
-    images = list(dict.fromkeys(re.findall(r"IMAGE: (\S+)", "\n".join(outputs))))
-    return msgs[-1].content, calls, outputs, images
+    text = "\n".join(str(output) for output in outputs)
 
+    paths = re.findall(
+        r"IMAGE:\s*(\S+)",
+        text
+    )
 
-if __name__ == "__main__":
-    q = " ".join(sys.argv[1:]) or "How many attention heads does the base Transformer use?"
-    answer, calls, outputs, images = ask([{"role": "user", "content": q}])
-    print(f"\nOutils appeles : {calls}\n\nReponse : {answer}\n\nImages : {images}")
+    return list(dict.fromkeys(paths))

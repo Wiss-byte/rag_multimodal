@@ -1,104 +1,354 @@
-"""Indexation des figures : embeddings CLIP + descriptions (legende du PDF + moondream) -> PGVector.
-Usage : uv run python ingest_images.py [chemin_du_pdf]"""
-import re
-import sys
-from pathlib import Path
 
-import ollama
+"""
+INGESTION DES IMAGES - MULTIMODAL RAG
+
+Fonctionnalites :
+1. Extraction des images depuis un PDF.
+2. Sauvegarde des images localement.
+3. Generation des embeddings avec CLIP ViT-B-32.
+4. Normalisation des embeddings.
+5. Indexation dans PostgreSQL / PGVector.
+6. Conservation des metadonnees.
+7. Identification du document avec SHA-256.
+"""
+
+import sys
+import hashlib
+import logging
+
+from pathlib import Path
+from io import BytesIO
+
 import pymupdf
-from llama_index.core.schema import TextNode
-from llama_index.core.vector_stores import VectorStoreQuery
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.vector_stores.postgres import PGVectorStore
 from PIL import Image
+
 from sentence_transformers import SentenceTransformer
 
-PDF = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("data/attention.pdf")
-IMG_DIR = Path("data/images")
-SOURCE = PDF.name
-VLM = "moondream"
-DB = dict(host="localhost", port=5433, database="rag", user="rag", password="rag")
+from llama_index.core import (
+    VectorStoreIndex,
+    StorageContext,
+    Settings,
+)
 
-# ---------------------------------------------------------------- modeles
-clip = SentenceTransformer("clip-ViT-B-32")                                             # 512 dim
-text_embed = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")  # 384 dim
+from llama_index.core.schema import TextNode
 
-# Deux tables : les dimensions sont differentes (512 pour CLIP, 384 pour le texte)
-store_clip = PGVectorStore.from_params(table_name="image_clip", embed_dim=512, **DB)
-store_caps = PGVectorStore.from_params(table_name="image_captions", embed_dim=384, **DB)
-store_clip.clear()
-store_caps.clear()
-
-pdf = pymupdf.open(PDF)
-
-# ---------------------------------------------------------------- fonctions utiles
-# Plusieurs essais : un petit modele renvoie parfois une reponse vide ou en boucle
-ATTEMPTS = [
-    ("Describe this figure in 3 or 4 sentences: main components, labels, and what it shows.",
-     {"temperature": 0, "num_predict": 150, "repeat_penalty": 1.3}),
-    ("Describe this figure or diagram in detail.",
-     {"temperature": 0.3, "num_predict": 150, "repeat_penalty": 1.1}),
-    ("What is in this image?",
-     {"temperature": 0.5, "num_predict": 120}),
-]
+from llama_index.vector_stores.postgres import PGVectorStore
 
 
-def describe(path: Path) -> str:
-    """Description par le modele vision-langage ; essaie plusieurs prompts si la reponse est vide."""
-    for prompt, opts in ATTEMPTS:
-        r = ollama.chat(
-            model=VLM,
-            messages=[{"role": "user", "content": prompt, "images": [str(path)]}],
-            options=opts,
+# ============================================================
+# 1. CONFIGURATION
+# ============================================================
+
+DB_CONFIG = {
+    "host": "localhost",
+    "port": 5433,
+    "database": "rag",
+    "user": "rag",
+    "password": "rag",
+}
+
+CLIP_MODEL_NAME = "clip-ViT-B-32"
+
+CLIP_DIM = 512
+
+IMAGE_DIR = Path("data/images")
+
+IMAGE_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+
+# ============================================================
+# 2. LOGGING
+# ============================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s - %(message)s"
+)
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# 3. IDENTIFICATION SHA-256
+# ============================================================
+
+def calculate_document_id(pdf_path: Path) -> str:
+
+    """
+    Calcule l'identifiant unique SHA-256 du PDF.
+    """
+
+    sha256 = hashlib.sha256()
+
+    with pdf_path.open("rb") as file:
+
+        for block in iter(
+            lambda: file.read(1024 * 1024),
+            b""
+        ):
+
+            sha256.update(block)
+
+    return sha256.hexdigest()
+
+
+# ============================================================
+# 4. CHARGEMENT DU MODELE CLIP
+# ============================================================
+
+logger.info("Chargement du modèle CLIP...")
+
+clip_model = SentenceTransformer(
+    CLIP_MODEL_NAME
+)
+
+logger.info("Modèle CLIP chargé.")
+
+
+# ============================================================
+# 5. INITIALISATION PGVECTOR
+# ============================================================
+
+image_store = PGVectorStore.from_params(
+    table_name="image_clip",
+    embed_dim=CLIP_DIM,
+    **DB_CONFIG
+)
+
+
+# ============================================================
+# 6. EXTRACTION ET SAUVEGARDE DES IMAGES
+# ============================================================
+
+def extract_images(pdf_path: Path, document_id: str):
+
+    """
+    Extrait les images intégrées au PDF
+    et les sauvegarde dans data/images.
+    """
+
+    logger.info("Début de l'extraction des images...")
+
+    pdf = pymupdf.open(pdf_path)
+
+    image_nodes = []
+
+    extracted_count = 0
+
+    for page_number, page in enumerate(pdf, start=1):
+
+        image_list = page.get_images(full=True)
+
+        for image_index, image_info in enumerate(image_list):
+
+            xref = image_info[0]
+
+            try:
+
+                # Extraction de l'image
+                base_image = pdf.extract_image(xref)
+
+                image_bytes = base_image["image"]
+
+                image_ext = base_image["ext"]
+
+                # Chargement avec Pillow
+                image = Image.open(
+                    BytesIO(image_bytes)
+                ).convert("RGB")
+
+                # Nom unique du fichier
+                image_name = (
+                    f"{document_id[:12]}_"
+                    f"p{page_number}_"
+                    f"img{image_index + 1}.png"
+                )
+
+                image_path = IMAGE_DIR / image_name
+
+                # Sauvegarde au format PNG
+                image.save(
+                    image_path,
+                    format="PNG"
+                )
+
+                # Génération embedding CLIP normalisé
+                embedding = clip_model.encode(
+                    image,
+                    normalize_embeddings=True
+                )
+
+                # Création du noeud LlamaIndex
+                node = TextNode(
+                    text=(
+                        f"Image extraite de la page "
+                        f"{page_number} du document "
+                        f"{pdf_path.name}"
+                    ),
+
+                    embedding=embedding.tolist(),
+
+                    metadata={
+                        "type": "image",
+                        "page": page_number,
+                        "source": pdf_path.name,
+                        "image_path": image_path.as_posix(),
+                        "document_id": document_id,
+                        "image_index": image_index + 1,
+                        "image_extension": image_ext,
+                    }
+                )
+
+                image_nodes.append(node)
+
+                extracted_count += 1
+
+                logger.info(
+                    "Image extraite : page %s, image %s",
+                    page_number,
+                    image_index + 1
+                )
+
+            except Exception as error:
+
+                logger.warning(
+                    "Erreur extraction image page %s : %s",
+                    page_number,
+                    error
+                )
+
+    pdf.close()
+
+    logger.info(
+        "%s images extraites.",
+        extracted_count
+    )
+
+    return image_nodes
+
+
+# ============================================================
+# 7. INDEXATION DES EMBEDDINGS CLIP
+# ============================================================
+
+def index_images(image_nodes):
+
+    """
+    Indexe les embeddings CLIP pré-calculés
+    dans PostgreSQL / PGVector.
+
+    Aucun embedding OpenAI ou MiniLM n'est utilisé ici.
+    """
+
+    if not image_nodes:
+
+        logger.warning(
+            "Aucune image à indexer."
         )
-        text = r["message"]["content"].strip()
-        if len(text) > 30:
-            return text
-    return ""
+
+        return
+
+    logger.info(
+        "Indexation des images dans PGVector..."
+    )
+
+    # Les embeddings CLIP sont déjà calculés.
+    # On désactive le modèle d'embedding par défaut.
+    storage_context = StorageContext.from_defaults(
+        vector_store=image_store
+    )
+
+    VectorStoreIndex(
+        image_nodes,
+        storage_context=storage_context,
+        embed_model="none",
+        show_progress=True
+    )
+
+    logger.info(
+        "Indexation des images terminée."
+    )
 
 
-def pdf_caption(page_number: int) -> str:
-    """Legende(s) 'Figure N: ...' extraite(s) du texte de la page du PDF."""
-    text = pdf[page_number - 1].get_text()
-    found = re.findall(r"Figure\s+\d+\s*:.{0,200}", text, flags=re.S)
-    return " ".join(" ".join(f.split()) for f in found[:2])
+# ============================================================
+# 8. PIPELINE PRINCIPAL
+# ============================================================
+
+def ingest_images(pdf_file: str):
+
+    pdf_path = Path(pdf_file)
+
+    if not pdf_path.exists():
+
+        raise FileNotFoundError(
+            f"PDF introuvable : {pdf_path}"
+        )
+
+    if pdf_path.suffix.lower() != ".pdf":
+
+        raise ValueError(
+            "Le fichier doit être un PDF."
+        )
+
+    logger.info("=" * 55)
+
+    logger.info(
+        "DEMARRAGE DE L'INGESTION DES IMAGES"
+    )
+
+    logger.info("=" * 55)
+
+    # Etape 1 : calcul SHA-256
+    document_id = calculate_document_id(
+        pdf_path
+    )
+
+    logger.info(
+        "Document ID : %s",
+        document_id
+    )
+
+    # Etape 2 : extraction des images
+    image_nodes = extract_images(
+        pdf_path,
+        document_id
+    )
+
+    # Etape 3 : indexation CLIP
+    index_images(image_nodes)
+
+    logger.info("=" * 55)
+
+    logger.info(
+        "INGESTION DES IMAGES TERMINEE"
+    )
+
+    logger.info(
+        "Nombre d'images indexées : %s",
+        len(image_nodes)
+    )
+
+    logger.info("=" * 55)
 
 
-# ---------------------------------------------------------------- indexation
-clip_nodes, cap_nodes = [], []
-for path in sorted(IMG_DIR.glob("*.png")):
-    page = int(path.stem.split("_")[0][1:])          # "p3_1" -> 3
-    meta = {"type": "image", "page": page, "source": SOURCE, "image_path": path.as_posix()}
+# ============================================================
+# 9. EXECUTION
+# ============================================================
 
-    # 1) CLIP : vecteur de l'image (permet de la chercher avec une phrase)
-    with Image.open(path) as im:
-        v = clip.encode(im.convert("RGB"), normalize_embeddings=True).tolist()
-    clip_nodes.append(TextNode(text=path.as_posix(), embedding=v, metadata=meta))
+if __name__ == "__main__":
 
-    # 2) Description = legende du PDF + description du modele vision-langage
-    parts = [pdf_caption(page), describe(path)]
-    caption = " ".join(p for p in parts if p) or f"Figure on page {page} of the document."
-    print(f"\n--- {path.name} (page {page}) ---\n{caption}")
+    if len(sys.argv) < 2:
 
-    # 3) La description est embeddee comme du texte -> interrogeable
-    cap_nodes.append(TextNode(
-        text=caption, embedding=text_embed.get_text_embedding(caption), metadata=meta))
+        print(
+            "Usage : uv run python ingest_images.py "
+            "data/attention.pdf"
+        )
 
-if clip_nodes:
-    store_clip.add(clip_nodes)
-    store_caps.add(cap_nodes)
-print(f"\nIndexe : {len(clip_nodes)} images (CLIP) et {len(cap_nodes)} descriptions.")
+        sys.exit(1)
 
-# ---------------------------------------------------------------- tests de recherche (uniquement en mode console)
-if len(sys.argv) == 1 and clip_nodes:
-    for q in ["Transformer model architecture with encoder and decoder",
-              "scaled dot-product attention and multi-head attention"]:
-        print(f"\nRequete : {q}")
-        qv = clip.encode(q, normalize_embeddings=True).tolist()
-        res = store_clip.query(VectorStoreQuery(query_embedding=qv, similarity_top_k=2))
-        for n, s in zip(res.nodes, res.similarities):
-            print(f"  CLIP        -> {n.metadata['image_path']} (page {n.metadata['page']}) score={s:.2f}")
-        qt = text_embed.get_query_embedding(q)
-        res = store_caps.query(VectorStoreQuery(query_embedding=qt, similarity_top_k=2))
-        for n, s in zip(res.nodes, res.similarities):
-            print(f"  Description -> {n.metadata['image_path']} (page {n.metadata['page']}) score={s:.2f}")
+    ingest_images(
+        sys.argv[1]
+    )
